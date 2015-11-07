@@ -1,0 +1,18 @@
+<package>
+  <description brief="followme_laser">
+     followme_laser
+  </description>
+  <author>arnaud</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/followme_laser</url>
+
+  <depend package="geometry_msgs"/>
+  <depend package="sensor_msgs"/>
+  <depend package="tf"/>
+  <depend package="visualization_msgs"/>
+
+  <export>
+    <cpp cflags="-I${prefix}" lflags="-L${prefix}/lib -Wl,-rpath,${prefix}/lib"/>
+  </export>
+</package>

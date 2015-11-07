@@ -1,0 +1,14 @@
+<launch>
+<node pkg="followme_laser" type="ros_laser_blob_tracker.exe"
+      name="ros_laser_blob_tracker" output="screen"
+      args="1" />
+
+<!-- the goal tracker -->
+<node pkg="followme_laser" type="ros_goal_dynamic_window_tracker.exe"
+      name="ros_goal_dynamic_window_tracker" output="screen"
+      args="_goal_pt_topic:=ros_laser_blob_tracker/moving_goal" />
+
+<!-- rviz -->
+<node pkg="rviz" type="rviz" name="rviz"
+      args="--display-config $(find followme_laser)/config/followme_laser.rviz" />
+</launch>
