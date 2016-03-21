@@ -8,7 +8,8 @@ popd > /dev/null
 
 cd ..
 rm -f package.xml # clean for catkin files
-ln -s --force $SCRIPTPATH/MakeLists_rosmake.txt  CMakeLists.txt
+ln -s --force $SCRIPTPATH/CMakeLists_rosmake.txt  CMakeLists.txt
+ln -s --force $SCRIPTPATH/Makefile
 ln -s --force $SCRIPTPATH/manifest.xml
 ls -al
 rospack profile
