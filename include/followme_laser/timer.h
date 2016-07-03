@@ -23,7 +23,7 @@ public:
     gettimeofday(&start, NULL);
   }
   //! get the time since ctor or last reset (milliseconds)
-  virtual inline Time getTimeSeconds() const {
+  virtual inline Time getTimeMilliseconds() const {
     struct timeval end;
     gettimeofday(&end, NULL);
     return (Time) (// seconds
@@ -33,10 +33,8 @@ public:
                    (end.tv_usec - start.tv_usec)
                    / 1E6);
   }
-private:
-  struct timeval start;
-}; // end class Timer
-al inline Time getTimeSeconds() const {
+
+  virtual inline Time getTimeSeconds() const {
     return getTimeMilliseconds() / 1000.f;
   }
 
