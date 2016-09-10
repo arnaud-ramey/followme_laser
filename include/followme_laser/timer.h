@@ -28,10 +28,10 @@ public:
     gettimeofday(&end, NULL);
     return (Time) (// seconds
                    (end.tv_sec - start.tv_sec)
-                   +
+                   * 1000 +
                    // useconds
                    (end.tv_usec - start.tv_usec)
-                   / 1E6);
+                   / 1000);
   }
 
   virtual inline Time getTimeSeconds() const {
