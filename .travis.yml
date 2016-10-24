@@ -1,0 +1,37 @@
+# travis rules for rosmip
+# use Ubuntu Trusty 14.04, compatible with ROS Indigo - check https://docs.travis-ci.com/user/ci-environment/
+sudo: required
+dist: trusty
+
+language: cpp
+compiler:
+  - gcc
+
+before_install:
+  # install ROS according to http://wiki.ros.org/indigo/Installation/Ubuntu
+  - export ROS_DISTRO=indigo
+  - sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu trusty main" > /etc/apt/sources.list.d/ros-latest.list'
+  - wget https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -O - | sudo apt-key add -
+  - sudo apt-get -qq update
+  - sudo apt-get install -y -qq  ros-$ROS_DISTRO-ros-base python-catkin-pkg python-rosdep python-wstool
+  - source /opt/ros/$ROS_DISTRO/setup.bash
+  # fix a bug with catkin_pkg - cf. http://answers.ros.org/question/56873/problem-with-catkin_make/
+  - export PYTHONPATH="$PYTHONPATH:/usr/lib/python2.7/dist-packages"
+  # Prepare rosdep to install dependencies.
+  - sudo rosdep init
+  - rosdep update
+
+before_script: # Use this to prepare your build for testing e.g. copy database configurations, environment variables, etc.
+  # Create catkin workspace
+  - export CI_SOURCE_PATH=$(pwd)
+  - mkdir -p ~/catkin_ws/src
+  - cd ~/catkin_ws/src
+  - catkin_init_workspace
+  - ln -s $CI_SOURCE_PATH . # Link the repo we are testing to the new workspace
+  # package depdencies: install using rosdep.
+  - cd ~/catkin_ws
+  - rosdep install -y --from-paths src
+
+script: # compile
+  - cd ~/catkin_ws
+  - catkin_make
