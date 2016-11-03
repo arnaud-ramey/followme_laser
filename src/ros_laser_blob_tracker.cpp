@@ -189,11 +189,11 @@ protected:
   //////////////////////////////////////////////////////////////////////////////
 
   void scan_cb(const sensor_msgs::LaserScanConstPtr & scan_msg) {
-    Timer timer;
+    vision_utils::Timer timer;
     // convert to (x,y) in msg frame
-    ros_utils::convert_sensor_data_to_xy(*scan_msg, _pts_src_frame);
+    vision_utils::convert_sensor_data_to_xy(*scan_msg, _pts_src_frame);
     double scan_z_dst_frame = 0;
-    if (!ros_utils::convert_xy_vec_frame(scan_msg->header,
+    if (!vision_utils::convert_xy_vec_frame(scan_msg->header,
                                      _pts_src_frame,
                                      _tf_listener,
                                      _dst_frame,
@@ -277,7 +277,7 @@ protected:
     */
     // publish marker for _closest_obj
     if (_closest_path_pub.getNumSubscribers()) {
-      ros_utils::vector2path(_closest_obj_pts, _closest_path);
+      vision_utils::vector2path(_closest_obj_pts, _closest_path);
       _closest_path.header.stamp = scan_msg->header.stamp;
       _closest_path.header.frame_id = _dst_frame;
       _closest_path_pub.publish(_closest_path);
@@ -285,7 +285,7 @@ protected:
 
     // publish marker for _tracked_object
     if (_tracked_path_pub.getNumSubscribers()) {
-      ros_utils::vector2path(_tracked_object, _tracked_path);
+      vision_utils::vector2path(_tracked_object, _tracked_path);
       _tracked_path.header.stamp = scan_msg->header.stamp;
       _tracked_path.header.frame_id = _dst_frame;
       if (_current_status == TrackingStatus::TARGET_TRACKING_LOST) {
@@ -309,12 +309,12 @@ protected:
 
   void tracking_seed_cb(const geometry_msgs::PoseStampedConstPtr & pose_in) {
     ROS_INFO_THROTTLE(1, "RosLaserBlobTracker:tracking_seed_cb(%s)",
-                      ros_utils::pose_stamped_to_string(*pose_in).c_str());
+                      vision_utils::pose_stamped_to_string(*pose_in).c_str());
     // make some sanity checks
     if (pose_in->pose.orientation.x == 0 && pose_in->pose.orientation.y == 0 &&
         pose_in->pose.orientation.z == 0 && pose_in->pose.orientation.w == 0) {
       ROS_WARN("tracking_seed_cb: invalid seed %s, stopping tracking.",
-               ros_utils::pose_stamped_to_string(*pose_in).c_str());
+               vision_utils::pose_stamped_to_string(*pose_in).c_str());
       stop_tracking_object();
       return;
     }

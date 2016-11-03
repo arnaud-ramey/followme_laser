@@ -91,7 +91,7 @@ static inline void convert_sensor_data_to_xy(const sensor_msgs::LaserScan & lase
   const float* curr_range = &(laser_msg.ranges[0]);
   float curr_angle = laser_msg.angle_min;
   for (unsigned int idx = 0; idx < laser_msg.ranges.size(); ++idx) {
-    //maggieDebug2("idx:%i, curr_range:%g", idx, *curr_range);
+    //ROS_INFO("idx:%i, curr_range:%g", idx, *curr_range);
     _Pt2 pt;
     pt.x = *curr_range * cos(curr_angle);
     pt.y = *curr_range * sin(curr_angle);

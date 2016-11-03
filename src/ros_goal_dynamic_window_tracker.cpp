@@ -107,9 +107,9 @@ public:
   void scan_cb(const sensor_msgs::LaserScanConstPtr & scan) {
     if (!_goal_set)
       return;
-    ros_utils::convert_sensor_data_to_xy(*scan, _scan2vec_src_frame);
+    vision_utils::convert_sensor_data_to_xy(*scan, _scan2vec_src_frame);
     double scan_z_dst_frame = 0;
-    if (!ros_utils::convert_xy_vec_frame(scan->header,
+    if (!vision_utils::convert_xy_vec_frame(scan->header,
                                          _scan2vec_src_frame,
                                          _tf_listener,
                                          _dst_frame,
@@ -127,7 +127,7 @@ public:
     _vel_pub.publish(twist);
     if (_traj_pub.getNumSubscribers()) { // dont publish path if no subscriber
       _path_msg.header = scan->header;
-      ros_utils::vector2path(get_best_trajectory(), _path_msg);
+      vision_utils::vector2path(get_best_trajectory(), _path_msg);
       _traj_pub.publish(_path_msg);
     }
   } // end scan_cb();
