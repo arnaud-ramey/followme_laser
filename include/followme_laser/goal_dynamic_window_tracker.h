@@ -3,8 +3,60 @@
 
 #include <vector>
 #include <math.h>
-#include "utils.h"
-#include "timer.h"
+#include <vision_utils/odom_utils.h>
+#include <vision_utils/distance_points_squared.h>
+#include <vision_utils/clamp.h>
+#include <vision_utils/timer.h>
+
+/*!
+ \param A
+    a 2D point
+ \param B
+    a vector of 2D points
+ \return min_dist
+    min distance otherwise
+*/
+template<class _Pt2>
+inline double vectors_dist(const _Pt2 & pt,
+                          const std::vector<_Pt2> & vec) {
+  double min_dist_sq = 1E10;
+  unsigned int npts = vec.size();
+  for (unsigned int i = 0; i < npts; ++i) {
+    double dist = vision_utils::distance_points_squared(pt, vec[i]);
+    if (dist < min_dist_sq)
+      min_dist_sq = dist;
+  } // end loop i
+  return sqrt(min_dist_sq);
+} // end vectors_dist_thres()
+
+////////////////////////////////////////////////////////////////////////////////
+/*!
+ \param A
+    a vector of 2D points
+ \param B
+    a vector of 2D points
+ \param min_dist
+    a threshold distance
+ \return min_dist
+    -1 if vectors closer than min_dist, min distance otherwise
+*/
+template<class _Pt2>
+inline double vectors_dist_thres(const std::vector<_Pt2> & A,
+                                 const std::vector<_Pt2> & B,
+                                 const double dist_thres) {
+  double dist_thres_sq = dist_thres * dist_thres, min_dist_sq = 1E10;
+  unsigned int nA = A.size(), nB = B.size();
+  for (unsigned int A_idx = 0; A_idx < nA; ++A_idx) {
+    for (unsigned int B_idx = 0; B_idx < nB; ++B_idx) {
+      double dist = vision_utils::distance_points_squared(A[A_idx], B[B_idx]);
+      if (dist < dist_thres_sq)
+        return -1;
+      if (dist < min_dist_sq)
+        min_dist_sq = dist;
+    } // end loop B_idx
+  } // end loop A_idx
+  return sqrt(min_dist_sq);
+} // end vectors_dist_thres()
 
 /*!
 * \struct SpeedOrder
@@ -28,7 +80,7 @@ public:
     Pt2 position;
     double yaw;
   };
-  
+
   //////////////////////////////////////////////////////////////////////////////
 
   GoalDynamicWindowTracker() {
@@ -41,25 +93,25 @@ public:
     set_goal_parameters();
     unset_goal();
   }
-  
+
   //////////////////////////////////////////////////////////////////////////////
-  
+
   inline void set_costmap(const std::vector<Pt2> & costmap_cell_centers,
                           const double min_obstacle_distance) {
     _costmap_cell_centers = costmap_cell_centers;
-    _min_obstacle_distance = utils::clamp(fabs(min_obstacle_distance), .01, 10.);
+    _min_obstacle_distance = vision_utils::clamp(fabs(min_obstacle_distance), .01, 10.);
   }
-  
+
   //////////////////////////////////////////////////////////////////////////////
-  
+
   inline void set_limit_speeds(double min_v, double max_v, double max_w) {
     _min_v = min_v;
     _max_v = max_v;
     _max_w = max_w;
   }
-  
+
   //////////////////////////////////////////////////////////////////////////////
-  
+
   inline void set_simulation_parameters(const double time_pred = 5,
                                         const double time_step = .2,
                                         double speed_recomputation_timeout = 1) {
@@ -87,21 +139,21 @@ public:
   }
 
   //////////////////////////////////////////////////////////////////////////////
-  
+
   inline std::vector<Pt2> get_best_trajectory() {
-    utils::make_trajectory(// get_best_element().element.v,
-                           _curr_order.v,
-                           // get_best_element().element.w,
-                           _curr_order.w,
-                           _traj_buffer,
-                           _time_pred, _time_step,
-                           0, 0, 0);
+    vision_utils::make_trajectory(// get_best_element().element.v,
+                                  _curr_order.v,
+                                  // get_best_element().element.w,
+                                  _curr_order.w,
+                                  _traj_buffer,
+                                  _time_pred, _time_step,
+                                  0, 0, 0);
     //start_pos.x, start_pos.y, start_yaw);
     return _traj_buffer;
   }
-  
+
   //////////////////////////////////////////////////////////////////////////////
-  
+
   virtual bool recompute_speeds(double & best_speed_lin,
                                 double & best_speed_ang) {
     if (!_goal_set) {
@@ -126,8 +178,8 @@ public:
     if (want_recompute_speed) {
       bool new_speeds_found = false;
       _last_speed_recomputation_timer.reset();
-#if 0
       int nb_tries = 0;
+#if 0
       // choose a random speed and check it enables at least 1 second of movement
       while (!new_speeds_found) {
         // authorize on place rotations only after having tried many times
@@ -154,57 +206,57 @@ public:
         return false;
       } // end not new_speeds_found
 
-      DEBUG_PRINT("Found a suitable couple of speeds in %g ms and %i tries: "
-                  "_v:%g, _w:%g\n",
-                  _last_speed_recomputation_timer.getTimeMilliseconds(), nb_tries,
-                  _curr_order.v,
-                  _curr_order.w);
+      printf("Found a suitable couple of speeds in %g ms and %i tries: "
+             "_v:%g, _w:%g\n",
+             _last_speed_recomputation_timer.getTimeMilliseconds(), nb_tries,
+             _curr_order.v,
+             _curr_order.w);
       _last_speed_recomputation_timer.reset();
     } // end if (want_recompute_speed)
 
     // publish the computed speed
-    DEBUG_PRINT("DynamicWindow: Publishing _v:%g, _w:%g\n",
-                _curr_order.v, _curr_order.w);
+    printf("DynamicWindow: Publishing _v:%g, _w:%g\n",
+           _curr_order.v, _curr_order.w);
     best_speed_lin = _curr_order.v;
     best_speed_ang = _curr_order.w;
     return true;
   } // end recompute_speeds()
-  
-  
-protected:  
+
+
+protected:
 
 
   ////////////////////////////////////////////////////////////////////////////////
-  
+
   inline void set_speed(const SpeedOrder & new_speed) {
-    DEBUG_PRINT("set_speed(lin:%g, ang:%g)",
+    printf("set_speed(lin:%g, ang:%g)",
                 new_speed.v, new_speed.w);
     _was_stopped = (new_speed.v == 0) && (new_speed.w == 0);
     _curr_order = new_speed;
   }
-  
+
   //////////////////////////////////////////////////////////////////////////////
-  
+
   //! stop the robot
   inline void stop_robot() {
     set_speed(SpeedOrder());
   }
-  
+
   ////////////////////////////////////////////////////////////////////////////////
-  
+
   //! return < 0 if the trajectory will collide with the laser in the time TIME_PRED,
   //! distance to closest obstacle otherwise + bonus for speed
   double trajectory_grade(const double & v, const double & w,
                           const std::vector<Pt2> & laser_xy) {
     // determine the coming trajectory
-    utils::make_trajectory(v, w, _traj_buffer, _time_pred, _time_step, 0, 0, 0);
+    vision_utils::make_trajectory(v, w, _traj_buffer, _time_pred, _time_step, 0, 0, 0);
     // find if there might be a collision
-    double obs_dist = utils::vectors_dist_thres(_traj_buffer, laser_xy,
+    double obs_dist = vectors_dist_thres(_traj_buffer, laser_xy,
                                                 _min_obstacle_distance);
     if (obs_dist < 0)
       return -1;
     // return inv of dist to goal - the higher the better
-    return 1. / (utils::vectors_dist(_goal, _traj_buffer) + obs_dist / 5);
+    return 1. / (vectors_dist(_goal, _traj_buffer) + obs_dist / 5);
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -228,34 +280,34 @@ protected:
 
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
-  
+
   std::vector<Pt2> _traj_buffer;
 
   // control
   //! timer since last computed speed
-  Timer _last_speed_recomputation_timer;
+  vision_utils::Timer _last_speed_recomputation_timer;
   //! the current velocities, m/s or rad/s
   SpeedOrder _curr_order;
   bool _was_stopped;
-  
+
   // obstacles
   std::vector<Pt2> _costmap_cell_centers;
   double _min_obstacle_distance;
   double _min_goal_distance, _max_goal_angle;
-  
+
   // robot parameters
   Pose2 _current_robot_pose;
   double _min_v, _max_v, _max_w;
   Pt2 _goal;
   bool _goal_set;
-  
+
   // simul parameters
   double _speed_recomputation_timeout;
   //! the forecast time in seconds
   double _time_pred;
   //! the time step simulation
   double _time_step;
-  
+
   // GoalDynamicWindowTracker params
   static const unsigned int MAX_TRIES = 1E6, SPEED_STEPS = 50;
 }; // end class GoalDynamicWindowTracker

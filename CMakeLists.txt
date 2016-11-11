@@ -21,13 +21,15 @@ catkin_package(
   CATKIN_DEPENDS roscpp  geometry_msgs  roscpp  sensor_msgs  tf  visualization_msgs
 )
 ### 7 - Libraries/Executables to build (add_library()/add_executable()/target_link_libraries())
+# get vision_utils includes from SVN
+execute_process( # https://cmake.org/cmake/help/v3.0/command/execute_process.html
+  COMMAND bash svn_vision_utils.bash
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
 include_directories( include ${catkin_INCLUDE_DIRS})
 add_executable(ros_laser_blob_tracker.exe
                src/ros_laser_blob_tracker.cpp
-               include/followme_laser/laser_blob_tracker.h
-               include/followme_laser/utils.h
-               include/followme_laser/ros_utils.h
-               include/followme_laser/timer.h)
+               include/followme_laser/laser_blob_tracker.h)
 target_link_libraries(ros_laser_blob_tracker.exe ${catkin_LIBRARIES})
 add_dependencies     (ros_laser_blob_tracker.exe
   ${PROJECT_NAME}_generate_messages_cpp
@@ -36,10 +38,7 @@ add_dependencies     (ros_laser_blob_tracker.exe
 
 add_executable(ros_goal_dynamic_window_tracker.exe
                src/ros_goal_dynamic_window_tracker.cpp
-               include/followme_laser/goal_dynamic_window_tracker.h
-               include/followme_laser/utils.h
-               include/followme_laser/ros_utils.h
-               include/followme_laser/timer.h)
+               include/followme_laser/goal_dynamic_window_tracker.h)
 target_link_libraries(ros_goal_dynamic_window_tracker.exe ${catkin_LIBRARIES})
 add_dependencies     (ros_goal_dynamic_window_tracker.exe
   ${PROJECT_NAME}_generate_messages_cpp

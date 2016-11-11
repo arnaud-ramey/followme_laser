@@ -72,14 +72,19 @@
     [geometry_msgs::Twist]
     The orders sent to the base.
 */
+// pkg
+#include <followme_laser/goal_dynamic_window_tracker.h>
+#include <vision_utils/convert_sensor_data_to_xy.h>
+#include <vision_utils/convert_xy_vec_frame.h>
+#include <vision_utils/vector2path.h>
 // ROS
 #include <ros/ros.h>
 #include <tf/transform_datatypes.h>
+#include <tf/transform_listener.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Twist.h>
-#include <followme_laser/goal_dynamic_window_tracker.h>
-#include <followme_laser/utils.h>
-#include <followme_laser/ros_utils.h>
+#include <sensor_msgs/LaserScan.h>
+#include <nav_msgs/Path.h>
 
 typedef geometry_msgs::Point Pt2;
 

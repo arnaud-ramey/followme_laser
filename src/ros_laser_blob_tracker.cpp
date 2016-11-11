@@ -67,10 +67,14 @@ ________________________________________________________________________________
 #include <sensor_msgs/LaserScan.h>
 #include <tf/transform_listener.h>
 #include <visualization_msgs/Marker.h>
+// vision_utils
+#include <vision_utils/convert_sensor_data_to_xy.h>
+#include <vision_utils/convert_xy_vec_frame.h>
+#include <vision_utils/copy2.h>
+#include <vision_utils/pose_stamped_to_string.h>
+#include <vision_utils/vector2path.h>
 // LaserBlobTracker
 #include <followme_laser/laser_blob_tracker.h>
-#include <followme_laser/utils.h>
-#include <followme_laser/ros_utils.h>
 
 #define PI          M_PI
 #define RAD2DEG     57.2957795130823208768  //!< to convert radians to degrees
@@ -231,7 +235,7 @@ protected:
                                    robot_pose_in, _dst_frame, robot_pose_out);
       else
         robot_pose_out = robot_pose_in;
-      utils::copy2(robot_pose_out.pose.position, _robot_pose.position);
+      vision_utils::copy2(robot_pose_out.pose.position, _robot_pose.position);
       _robot_pose.yaw = tf::getYaw(robot_pose_out.pose.orientation);
       ROS_DEBUG_THROTTLE(1, "The robot is in (%s), yaw:%g degrees in frame %s.",
                          _robot_pose.position.to_string().c_str(),
@@ -245,7 +249,7 @@ protected:
     /*
      * real laser tracking
      */
-    ROS_DEBUG_THROTTLE(1, "Now set_laser_data(pts:%i)", _pts_dst_frame.size());
+    ROS_DEBUG_THROTTLE(1, "Now set_laser_data(pts:%li)", _pts_dst_frame.size());
     set_laser_data(_pts_dst_frame, _robot_pose);
 
     /*
@@ -261,7 +265,7 @@ protected:
       geometry_msgs::PoseStamped msg;
       msg.header.frame_id = _dst_frame;
       msg.header.stamp = scan_msg->header.stamp;
-      utils::copy2(goal.position, msg.pose.position);
+      vision_utils::copy2(goal.position, msg.pose.position);
       msg.pose.position.z = scan_z_dst_frame;
       msg.pose.orientation = tf::createQuaternionMsgFromYaw(goal.yaw);
       _goal_pub.publish(msg);
@@ -298,7 +302,7 @@ protected:
         _tracked_path_pub.publish(_tracked_path);
     }
 
-    ROS_DEBUG_THROTTLE(1, "_closest_obj: %s (%i pts)",
+    ROS_DEBUG_THROTTLE(1, "_closest_obj: %s (%li pts)",
                        _closest_obj_pt.to_string().c_str(),
                        _closest_obj_pts.size());
 

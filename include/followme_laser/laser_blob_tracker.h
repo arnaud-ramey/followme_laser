@@ -2,10 +2,12 @@
 #define FOLLOWME_LASER_H
 
 // AD
-#include "timer.h"
-#include "utils.h"
+#include "vision_utils/timer.h"
+#include "vision_utils/norm2.h"
+#include "vision_utils/barycenter.h"
+#include "vision_utils/distance_points_squared.h"
 #include "followme_laser/TrackingStatus.h"
-
+#include <nav_msgs/Path.h>
 
 namespace followme_laser {
 
@@ -56,7 +58,7 @@ public:
   virtual inline void start_tracking_closest_object()  {
     _tracked_object_last_appearance.reset();
     _tracked_object = _closest_obj_pts;
-    _tracked_object_center = utils::barycenter(_tracked_object);
+    _tracked_object_center = vision_utils::barycenter(_tracked_object);
     _current_status = TrackingStatus::TARGET_TRACKING_OK;
   }
 
@@ -94,7 +96,7 @@ protected:
     for (unsigned int curr_pt_idx = 0;
          curr_pt_idx < _current_pts->size();
          ++curr_pt_idx) {
-      double curr_dist = utils::distance_points_squared(pt, *curr_pt++);
+      double curr_dist = vision_utils::distance_points_squared(pt, *curr_pt++);
       if (curr_dist < closest_laser_dist) {
         closest_laser_pt = curr_pt;
         closest_laser_idx = curr_pt_idx;
@@ -125,7 +127,7 @@ protected:
         (direction == -1 ? --curr_pt : ++curr_pt);
 
         // stop if the last neighbour too remote from the origin
-        if (utils::distance_points_squared(*start_pt, *curr_pt)
+        if (vision_utils::distance_points_squared(*start_pt, *curr_pt)
             > OBJECT_MAX_RADIUS_SQUARED) {
           //    ROS_INFO("direction:%i, curr_pt_idx:%i -> "
           //             "distance with start too high",
@@ -134,7 +136,7 @@ protected:
         }
 
         // stop if two last neighbours too remote
-        if (utils::distance_points_squared(*prev_pt, *curr_pt)
+        if (vision_utils::distance_points_squared(*prev_pt, *curr_pt)
             > OBJECT_MAX_DISTANCE_BTWN_POINTS_SQUARED) {
           //    ROS_INFO("direction:%i, curr_pt_idx:%i -> "
           //             "distance between neighbours too high",
@@ -190,7 +192,7 @@ protected:
       _tracked_object_last_appearance.reset();
       // replace _tracked_object and _tracked_object_center
       find_cluster_from_laser_pt(closest_laser_pt_index, _tracked_object);
-      _tracked_object_center = utils::barycenter(_tracked_object);
+      _tracked_object_center = vision_utils::barycenter(_tracked_object);
       // update safe goal
       // set a goal at DISTANCE_TO_OBJECT away from the goal
       _Pt2 vec_robot_to_obj_center =
@@ -199,7 +201,7 @@ protected:
           _current_robot_pose->position
           + vec_robot_to_obj_center
           * (1 - DISTANCE_TO_OBJECT /
-             utils::norm2(vec_robot_to_obj_center));
+             vision_utils::norm2(vec_robot_to_obj_center));
 
     } // end if dist < OBJECT_MAX_SEARCHING_RADIUS_SQUARED
     return true;
@@ -241,7 +243,7 @@ protected:
   _Pt2 _closest_obj_pt;
 
   // tracked object
-  Timer _tracked_object_last_appearance;
+  vision_utils::Timer _tracked_object_last_appearance;
   std::vector<_Pt2> _tracked_object;
   _Pt2 _tracked_object_center;
   _Pt2 _safe_goal_to_tracked_obj;
