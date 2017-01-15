@@ -51,7 +51,7 @@ ________________________________________________________________________________
       The pose of the object being tracked.
 
  - \b "~tracking_path"
-      [nav_msgs::Path]
+      [sensor_msgs::PointCloud]
       A marker to show the cluster closest to the robot and the tracked cluster.
 
  - \b "~status"
@@ -61,18 +61,16 @@ ________________________________________________________________________________
  */
 // ROS
 #include <ros/ros.h>
-#include <visualization_msgs/Marker.h>
+#include <geometry_msgs/Point32.h>
 #include <sensor_msgs/Joy.h>
-#include <geometry_msgs/Pose.h>
 #include <sensor_msgs/LaserScan.h>
+#include <sensor_msgs/PointCloud.h>
 #include <tf/transform_listener.h>
-#include <visualization_msgs/Marker.h>
 // vision_utils
 #include <vision_utils/convert_sensor_data_to_xy.h>
 #include <vision_utils/convert_xy_vec_frame.h>
 #include <vision_utils/copy2.h>
 #include <vision_utils/pose_stamped_to_string.h>
-#include <vision_utils/vector2path.h>
 // LaserBlobTracker
 #include <followme_laser/laser_blob_tracker.h>
 
@@ -82,55 +80,8 @@ ________________________________________________________________________________
 
 namespace followme_laser {
 
-/*! a generic templated class for 2D points.
-  It contains a x and a y field so as to be compatible
-  with OpenCV cv::Point*
-*/
-class SimplePt2D {
-public:
-  //! a constructor without arguments
-  SimplePt2D() : x(0), y(0) {}
-
-  //! a constructor
-  SimplePt2D(const float & x_, const float & y_) :
-    x(x_), y(y_) {}
-
-  //! the + operator, that substracts field by field
-  SimplePt2D operator + (const SimplePt2D& B) const {
-    return SimplePt2D(x + B.x, y + B.y);
-  }
-
-  //! the - operator, that substracts field by field
-  SimplePt2D operator - (const SimplePt2D& B) const {
-    return SimplePt2D(x - B.x, y - B.y);
-  }
-
-  //! the * operator, that multiplies field by field
-  SimplePt2D operator * (const float & alpha) const {
-    return SimplePt2D(alpha * x, alpha * y);
-  }
-
-  //! define the output to a stream
-  friend std::ostream & operator << (std::ostream & stream,
-                                     const SimplePt2D & P) {
-    stream << '[' << P.x << ", " << P.y << ']';
-    return stream;
-  }
-
-  //! return a string representation of the point
-  inline std::string to_string() const {
-    std::ostringstream ans;
-    ans << *this;
-    return ans.str();
-  }
-
-  float x; //!< the first data field
-  float y; //!< the second data field
-}; // end SimplePt2D
-
-////////////////////////////////////////////////////////////////////////////////
-
-class RosLaserBlobTracker : public LaserBlobTracker<SimplePt2D> {
+typedef geometry_msgs::Point32 Pt2;
+class RosLaserBlobTracker : public LaserBlobTracker<Pt2> {
 public:
 
   //! ctor
@@ -139,36 +90,45 @@ public:
   {
     ros::NodeHandle nh_private("~");
 
-    // get dst frame
-    nh_private.param<std::string>("dst_frame", _dst_frame, "/base_link");
+    // get params
+    nh_private.param("dst_frame", _dst_frame, std::string("/base_link"));
+    double object_max_radius, object_max_distance_btwn_points,
+        object_max_searching_radius, object_timeout, distance_to_object;
+    nh_private.param("object_max_radius", object_max_radius, .5);
+    nh_private.param("object_max_distance_btwn_points", object_max_distance_btwn_points, .2);
+    nh_private.param("object_max_searching_radius", object_max_searching_radius, .35);
+    nh_private.param("object_timeout", object_timeout, .5);
+    nh_private.param("distance_to_object", distance_to_object, .05);
+    set_object_max_radius(object_max_radius);
+    set_object_max_distance_btwn_points(object_max_distance_btwn_points);
+    set_object_max_searching_radius(object_max_searching_radius);
+    set_object_timeout(object_timeout);
+    set_distance_to_object(distance_to_object);
 
     // get topic name
-    std::string scan_topic;
-    nh_private.param<std::string>("scan_topic", scan_topic, "scan");
-    _laser_sub = _nh_public.subscribe
-                 (scan_topic, 1, &RosLaserBlobTracker::scan_cb, this);
+    _laser_sub = _nh_public.subscribe("scan", 1, &RosLaserBlobTracker::scan_cb, this);
 
     _goal_pub = _nh_public.advertise<geometry_msgs::PoseStamped>
-                ("moving_goal", 1);
+        ("moving_goal", 1);
     // joy subscriber
     _joy_sub = _nh_public.subscribe<sensor_msgs::Joy>
-               ("joy", 1,  &RosLaserBlobTracker::joy_cb, this);
+        ("joy", 1,  &RosLaserBlobTracker::joy_cb, this);
     // tracking seed subscriber
     _tracking_seed_sub = nh_private.subscribe
-                         ("tracking_seed", 1, &RosLaserBlobTracker::tracking_seed_cb, this);
+        ("tracking_seed", 1, &RosLaserBlobTracker::tracking_seed_cb, this);
     // marker publisher
-    _closest_path_pub = nh_private.advertise<nav_msgs::Path>
-                        ("closest_object", 1);
-    _tracked_path_pub = nh_private.advertise<nav_msgs::Path>
-                        ("tracked_object", 1);
+    _closest_cloud_pub = nh_private.advertise<sensor_msgs::PointCloud>
+        ("closest_object", 1);
+    _tracked_cloud_pub = nh_private.advertise<sensor_msgs::PointCloud>
+        ("tracked_object", 1);
     // status publisher
     _status_pub= nh_private.advertise<followme_laser::TrackingStatus>
-                 ("status", 1);
+        ("status", 1);
 
     ROS_WARN("RosLaserBlobTracker: scan_topic:'%s', _goal_topic:'%s', "
              "_path topic:'%s' (status on '%s')",
              _laser_sub.getTopic().c_str(), _goal_pub.getTopic().c_str(),
-             _closest_path_pub.getTopic().c_str(),
+             _closest_cloud_pub.getTopic().c_str(),
              _status_pub.getTopic().c_str());
   } // end ctor
 
@@ -176,13 +136,13 @@ public:
 
   virtual inline void start_tracking_closest_object() {
     stop_tracking_object();
-    LaserBlobTracker<SimplePt2D>::start_tracking_closest_object();
+    LaserBlobTracker<Pt2>::start_tracking_closest_object();
   }
 
   //////////////////////////////////////////////////////////////////////////////
 
   virtual inline void stop_tracking_object() {
-    LaserBlobTracker<SimplePt2D>::stop_tracking_object();
+    LaserBlobTracker<Pt2>::stop_tracking_object();
     // publish an empty pose to clean the pose in rviz
     geometry_msgs::PoseStamped msg;
     msg.header.frame_id = _dst_frame;
@@ -198,11 +158,11 @@ protected:
     vision_utils::convert_sensor_data_to_xy(*scan_msg, _pts_src_frame);
     double scan_z_dst_frame = 0;
     if (!vision_utils::convert_xy_vec_frame(scan_msg->header,
-                                     _pts_src_frame,
-                                     _tf_listener,
-                                     _dst_frame,
-                                     _pts_dst_frame,
-                                     scan_z_dst_frame))
+                                            _pts_src_frame,
+                                            _tf_listener,
+                                            _dst_frame,
+                                            _pts_dst_frame,
+                                            scan_z_dst_frame))
       return;
 
     // convert from msg frame to dst frame
@@ -237,8 +197,8 @@ protected:
         robot_pose_out = robot_pose_in;
       vision_utils::copy2(robot_pose_out.pose.position, _robot_pose.position);
       _robot_pose.yaw = tf::getYaw(robot_pose_out.pose.orientation);
-      ROS_DEBUG_THROTTLE(1, "The robot is in (%s), yaw:%g degrees in frame %s.",
-                         _robot_pose.position.to_string().c_str(),
+      ROS_DEBUG_THROTTLE(1, "The robot is in (%g, %g), yaw:%g degrees in frame %s.",
+                         _robot_pose.position.x, _robot_pose.position.y,
                          _robot_pose.yaw * RAD2DEG,
                          _dst_frame.c_str());
     } catch (tf::ExtrapolationException e) {
@@ -280,30 +240,35 @@ protected:
     * markers
     */
     // publish marker for _closest_obj
-    if (_closest_path_pub.getNumSubscribers()) {
-      vision_utils::vector2path(_closest_obj_pts, _closest_path);
-      _closest_path.header.stamp = scan_msg->header.stamp;
-      _closest_path.header.frame_id = _dst_frame;
-      _closest_path_pub.publish(_closest_path);
+    if (_closest_cloud_pub.getNumSubscribers()) {
+      //vision_utils::vector2path(_closest_obj_pts, _closest_cloud);
+      _closest_cloud.header.stamp = scan_msg->header.stamp;
+      _closest_cloud.header.frame_id = _dst_frame;
+      _closest_cloud.points = _closest_obj_pts;
+      for (unsigned int i = 0; i < _closest_cloud.points.size(); ++i)
+        _closest_cloud.points[i].z += .1; // make pts slightly higher
+      //_closest_cloud.points = _pts_dst_frame;
+      _closest_cloud_pub.publish(_closest_cloud);
     }
 
     // publish marker for _tracked_object
-    if (_tracked_path_pub.getNumSubscribers()) {
-      vision_utils::vector2path(_tracked_object, _tracked_path);
-      _tracked_path.header.stamp = scan_msg->header.stamp;
-      _tracked_path.header.frame_id = _dst_frame;
+    if (_tracked_cloud_pub.getNumSubscribers()) {
+      _tracked_cloud.header.stamp = scan_msg->header.stamp;
+      _tracked_cloud.header.frame_id = _dst_frame;
+      _tracked_cloud.points = _tracked_object;
+      for (unsigned int i = 0; i < _tracked_cloud.points.size(); ++i)
+        _tracked_cloud.points[i].z += .2; // make pts slightly higher
       if (_current_status == TrackingStatus::TARGET_TRACKING_LOST) {
         // make it blinking
         double sec_rest = ros::Time::now().toSec() - (int) ros::Time::now().toSec();
         if (sec_rest < 0.25 || (0.5 < sec_rest && sec_rest < 0.75))
-          _tracked_path.poses.clear();
+          _tracked_cloud.points.clear();
       } // end if LOST
-      if (!_tracked_path.poses.empty())
-        _tracked_path_pub.publish(_tracked_path);
+      _tracked_cloud_pub.publish(_tracked_cloud);
     }
 
-    ROS_DEBUG_THROTTLE(1, "_closest_obj: %s (%li pts)",
-                       _closest_obj_pt.to_string().c_str(),
+    ROS_DEBUG_THROTTLE(1, "_closest_obj: (%g, %g) (%li pts)",
+                       _closest_obj_pt.x, _closest_obj_pt.y,
                        _closest_obj_pts.size());
 
     //ROS_INFO_THROTTLE(1, "time for scan_cb(): %g ms", timer.time());
@@ -331,8 +296,9 @@ protected:
                                  *pose_in, _dst_frame, pose_dst_frame);
     }
     // set the new goal
-    SimplePt2D new_goal(pose_dst_frame.pose.position.x,
-                        pose_dst_frame.pose.position.y);
+    Pt2 new_goal;
+    new_goal.x = pose_dst_frame.pose.position.x;
+    new_goal.y = pose_dst_frame.pose.position.y;
     start_tracking_closest_object_at_given_point(new_goal);
   } // end tracking_seed_cb();
 
@@ -366,9 +332,9 @@ protected:
   ros::Subscriber _joy_sub, _tracking_seed_sub, _laser_sub;
   std::string _dst_frame;
   SimplePose2D _robot_pose;
-  std::vector<SimplePt2D> _pts_src_frame, _pts_dst_frame;
-  nav_msgs::Path _closest_path, _tracked_path;
-  ros::Publisher _closest_path_pub, _tracked_path_pub, _goal_pub, _status_pub;
+  std::vector<Pt2> _pts_src_frame, _pts_dst_frame;
+  sensor_msgs::PointCloud _closest_cloud, _tracked_cloud;
+  ros::Publisher _closest_cloud_pub, _tracked_cloud_pub, _goal_pub, _status_pub;
 }; // end RosLaserBlobTracker
 
 } // end namespace followme_laser

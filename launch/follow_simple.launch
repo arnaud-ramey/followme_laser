@@ -1,7 +1,12 @@
 <launch>
+<arg name="dst_frame" default="base_link"/>
+
+<!-- the blob tracker -->
 <node pkg="followme_laser" type="ros_laser_blob_tracker.exe"
       name="ros_laser_blob_tracker" output="screen"
-      args="1" />
+      args="1">
+  <param name="dst_frame" value="$(arg dst_frame)"/>
+</node>
 
 <!-- the goal tracker -->
 <node pkg="followme_laser" type="ros_goal_dynamic_window_tracker.exe"

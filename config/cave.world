@@ -1,0 +1,41 @@
+include "stage_includes.inc"
+
+# set the resolution of the underlying raytrace model in meters
+resolution 0.02
+
+interval_sim 100  # simulation timestep in milliseconds
+
+# configure the GUI window
+window
+(
+  size [ 681 742 ] # in pixels
+  scale 72.091   # pixels per meter
+  center [ 0.183  -0.143 ]
+  rotate [ 0.000  0.000 ]
+
+  show_data 1              # 1=on 0=off
+)
+
+# load an environment bitmap
+floorplan
+(
+  name "cave"
+  size [8.000 8.000 0.800]
+  pose [0.000 0.000 0.000 0.000]
+  bitmap "bitmaps/cave.png"
+)
+
+# throw in 2 robots
+pioneer2dx
+(
+  color "green"
+  pose [ -2.499  -3.196  0.000 19.104 ]
+  fancysick(pose [ 0.250 0.000 -0.200 0.000 ])
+)
+pioneer2dx
+(
+  color "blue"
+  pose [ -1.460 -2.860 0.000 0.000 ]
+  fancysick(pose [ 0.250 0.000 -0.200 0.000 ])
+)
+

@@ -20,28 +20,41 @@ public:
   //! a very straightforward 2D point structure
   struct SimplePose2D {
     _Pt2 position;
-    float yaw;
+    double yaw;
     //! ctor
-    SimplePose2D(const float & x_, const float & y_, const float & yaw_)
-      : position(x_, y_), yaw(yaw_) {}
+    SimplePose2D(const double & x_, const double & y_, const double & yaw_): yaw(yaw_) {
+      position.x = x_;
+      position.y = y_;
+    }
   }; // end SimplePose2D
-
-  //! the maximum radius of an object
-  static const float OBJECT_MAX_RADIUS_SQUARED                = .50 * .50;
-  //! the maximum distance between two consecutive points of an object
-  static const float OBJECT_MAX_DISTANCE_BTWN_POINTS_SQUARED  = .20 * .20;
-  /*! the maximum distance for looking for a
-      lost object around its last position */
-  static const float OBJECT_MAX_SEARCHING_RADIUS_SQUARED      = .35 * .35;
-  //! time in second to declare an object lost (sec)
-  static const float OBJECT_TIMEOUT = 5.f;
-  //! the distance for a safe goal for navig (meters)
-  static const float DISTANCE_TO_OBJECT = .05;
 
   //////////////////////////////////////////////////////////////////////////////
 
-  LaserBlobTracker() {
+  LaserBlobTracker()
+    :   _object_max_radius_squared(.50 * 50),
+      _object_max_distance_btwn_points_squared(.20 * .20),
+      _object_max_searching_radius_squared(.35 * .35),
+      _object_timeout(.5),
+      _distance_to_object(.05) {
     stop_tracking_object();
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  void set_object_max_radius(const double & x) {
+    _object_max_radius_squared = x * x;
+  }
+  void set_object_max_distance_btwn_points(const double & x) {
+    _object_max_distance_btwn_points_squared = x * x;
+  }
+  void set_object_max_searching_radius(const double & x) {
+    _object_max_searching_radius_squared = x * x;
+  }
+  void set_object_timeout(const double & x) {
+    _object_timeout = x;
+  }
+  void set_distance_to_object(const double & x) {
+    _distance_to_object = x;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -72,12 +85,12 @@ public:
 
   inline const char* get_current_status_as_string() const {
     switch(_current_status) {
-    case TrackingStatus::NO_TARGET:
-      return "no target"; break;
-    case TrackingStatus::TARGET_TRACKING_OK:
-      return "target tracking:OK"; break;
-    case TrackingStatus::TARGET_TRACKING_LOST: default:
-      return "target tracking:LOST"; break;
+      case TrackingStatus::NO_TARGET:
+        return "no target"; break;
+      case TrackingStatus::TARGET_TRACKING_OK:
+        return "target tracking:OK"; break;
+      case TrackingStatus::TARGET_TRACKING_LOST: default:
+        return "target tracking:LOST"; break;
     }
     return "";
   } // end get_current_status_as_string()
@@ -128,7 +141,7 @@ protected:
 
         // stop if the last neighbour too remote from the origin
         if (vision_utils::distance_points_squared(*start_pt, *curr_pt)
-            > OBJECT_MAX_RADIUS_SQUARED) {
+            > _object_max_radius_squared) {
           //    ROS_INFO("direction:%i, curr_pt_idx:%i -> "
           //             "distance with start too high",
           //             direction, curr_pt_idx);
@@ -137,7 +150,7 @@ protected:
 
         // stop if two last neighbours too remote
         if (vision_utils::distance_points_squared(*prev_pt, *curr_pt)
-            > OBJECT_MAX_DISTANCE_BTWN_POINTS_SQUARED) {
+            > _object_max_distance_btwn_points_squared) {
           //    ROS_INFO("direction:%i, curr_pt_idx:%i -> "
           //             "distance between neighbours too high",
           //             direction, curr_pt_idx);
@@ -174,18 +187,18 @@ protected:
                                closest_laser_pt_index,
                                closest_laser_pt_dist);
     // if closest laser pt too remote, object is lost
-    if (closest_laser_pt_dist > OBJECT_MAX_SEARCHING_RADIUS_SQUARED) {
+    if (closest_laser_pt_dist > _object_max_searching_radius_squared) {
       _current_status = TrackingStatus::TARGET_TRACKING_LOST;
       if (_tracked_object_last_appearance.getTimeMilliseconds() / 1000.f
-          > OBJECT_TIMEOUT) {
+          > _object_timeout) {
         printf("The object has disappeared for too long (%f > timeout=%f). "
                "Stopping tracking.\n",
                _tracked_object_last_appearance.getTimeMilliseconds() / 1000.f,
-               OBJECT_TIMEOUT);
+               _object_timeout);
         stop_tracking_object();
       }
       return false;
-    } // end if dist > OBJECT_MAX_SEARCHING_RADIUS_SQUARED
+    } // end if dist > _object_max_searching_radius_squared
     // otherwise, tracking successful:
     else {
       _current_status = TrackingStatus::TARGET_TRACKING_OK;
@@ -194,16 +207,16 @@ protected:
       find_cluster_from_laser_pt(closest_laser_pt_index, _tracked_object);
       _tracked_object_center = vision_utils::barycenter(_tracked_object);
       // update safe goal
-      // set a goal at DISTANCE_TO_OBJECT away from the goal
-      _Pt2 vec_robot_to_obj_center =
-          _tracked_object_center - _current_robot_pose->position;
-      _safe_goal_to_tracked_obj =
-          _current_robot_pose->position
-          + vec_robot_to_obj_center
-          * (1 - DISTANCE_TO_OBJECT /
-             vision_utils::norm2(vec_robot_to_obj_center));
+      // set a goal at _distance_to_object away from the goal
+      _Pt2 vec_robot_to_obj_center;
+      vec_robot_to_obj_center.x = _tracked_object_center.x - _current_robot_pose->position.x;
+      vec_robot_to_obj_center.y = _tracked_object_center.y - _current_robot_pose->position.y;
+      double ratio = (1 - _distance_to_object /
+                      vision_utils::norm2(vec_robot_to_obj_center));
+      _safe_goal_to_tracked_obj.x = _current_robot_pose->position.x + ratio * vec_robot_to_obj_center.x;
+      _safe_goal_to_tracked_obj.y = _current_robot_pose->position.y + ratio * vec_robot_to_obj_center.y;
 
-    } // end if dist < OBJECT_MAX_SEARCHING_RADIUS_SQUARED
+    } // end if dist < _object_max_searching_radius_squared
     return true;
   } // end start_tracking_closest_object_at_given_point();
 
@@ -234,6 +247,18 @@ protected:
 
   int _current_status;
 
+  // tracking params
+  //! the maximum radius of an object
+  double _object_max_radius_squared;
+  //! the maximum distance between two consecutive points of an object
+  double _object_max_distance_btwn_points_squared;
+  /*! the maximum distance for looking for a
+      lost object around its last position */
+  double _object_max_searching_radius_squared;
+  //! time in second to declare an object lost (sec)
+  double _object_timeout;
+  //! the distance for a safe goal for navig (meters)
+  double _distance_to_object;
   // current data
   const std::vector<_Pt2>* _current_pts;
   const SimplePose2D* _current_robot_pose;

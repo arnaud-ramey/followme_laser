@@ -2,14 +2,50 @@
 <!-- do not use Linux wall time but a simulated time -->
 <param name="/use_sim_time" value="true"/>
 
+<!-- launch Stage-->
 <!-- find /opt/ros/*/share/stage* -name "*.world" -->
 <remap from="/base_scan_1" to="/scan"/>
 <node pkg="stage_ros" type="stageros" name="stage" output="log" required="true"
-  args="/opt/ros/indigo/share/stage/worlds/simple.world" />
-<!--
-  args="/opt/ros/indigo/share/stage/worlds/pioneer_walle.world" />
--->
+  args="$(find followme_laser)/config/cave.world" />
 
-<include file="$(find followme_laser)/launch/follow_simple.launch"/>
+<!-- move a bit the robot to follow, otherwise it blinks in Stage (bug?) -->
+<node pkg="rostopic" type="rostopic" name="cmdvel"
+      output="screen" args="pub  -1  /robot_1/cmd_vel  geometry_msgs/Twist '{linear: {x: 0.1}, angular: {z: 0}}'" />
+<!-- configure Stage TF -->
+<node pkg="tf" type="static_transform_publisher" name="robot0toworld" output="screen"
+      args="0 0 0  0 0 0  /odom /robot_0/odom 100" />
+<node pkg="tf" type="static_transform_publisher" name="robot1toworld" output="screen"
+      args="0 0 0  0 0 0  /odom /robot_1/odom 100" />
+
+<!-- Move the second robot with joypad
+  http://wiki.ros.org/teleop_twist_joy -->
+<!-- Driver for the joystick. -->
+<node pkg="joy" type="joy_node" name="joy" output="screen" >
+  <param name="dev" value="/dev/input/js1" />
+  <param name="autorepeat_rate" value="25" />
+</node>
+<node pkg="teleop_twist_joy" type="teleop_node" name="teleop_node" output="screen" >
+  <remap from="/cmd_vel" to="/robot_1/cmd_vel"/>
+  <param name="enable_button" value="0"/> <!-- labelled "1" -->
+  <param name="axis_angular" value="0"/>
+  <param name="axis_linear" value="1"/>
+  <param name="scale_angular" value="3"/>
+  <param name="scale_linear" value="10"/>
+</node>
+
+<!-- configure followme_laser -->
+<remap from="/scan" to="/robot_0/base_scan"/>
+<remap from="/cmd_vel" to="/robot_0/cmd_vel"/>
+<param name="ros_laser_blob_tracker/object_max_distance_btwn_points" value=".15"/>
+<param name="ros_goal_dynamic_window_tracker/robot_radius" value=".3"/>
+<param name="ros_goal_dynamic_window_tracker/max_goal_angle" value=".1"/>
+<param name="ros_goal_dynamic_window_tracker/min_goal_distance" value=".3"/>
+<param name="ros_goal_dynamic_window_tracker/min_vel_lin" value="0"/>
+<param name="ros_goal_dynamic_window_tracker/max_vel_lin" value="2"/>
+
+<!-- launch followme_laser -->
+<include file="$(find followme_laser)/launch/follow_simple.launch">
+  <arg name="dst_frame" value="/robot_0/base_link"/>
+</include>
 </launch>
 
