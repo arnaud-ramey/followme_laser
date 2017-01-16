@@ -175,9 +175,9 @@ protected:
   inline bool start_tracking_closest_object_at_given_point
   (const _Pt2 tracking_pt)
   {
-    ROS_INFO_THROTTLE
-        (1, "LaserBlobTracker:start_tracking_closest_object_at_given_point(%g, %g)",
-         tracking_pt.x, tracking_pt.y);
+    //    ROS_INFO_THROTTLE
+    //        (1, "LaserBlobTracker:start_tracking_closest_object_at_given_point(%g, %g)",
+    //         tracking_pt.x, tracking_pt.y);
     const _Pt2* closest_laser_pt;
     int closest_laser_pt_index;
     double closest_laser_pt_dist;

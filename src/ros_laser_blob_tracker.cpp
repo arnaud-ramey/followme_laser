@@ -97,7 +97,7 @@ public:
     nh_private.param("object_max_radius", object_max_radius, .5);
     nh_private.param("object_max_distance_btwn_points", object_max_distance_btwn_points, .2);
     nh_private.param("object_max_searching_radius", object_max_searching_radius, .35);
-    nh_private.param("object_timeout", object_timeout, .5);
+    nh_private.param("object_timeout", object_timeout, 2.);
     nh_private.param("distance_to_object", distance_to_object, .05);
     set_object_max_radius(object_max_radius);
     set_object_max_distance_btwn_points(object_max_distance_btwn_points);

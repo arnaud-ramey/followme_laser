@@ -8,9 +8,9 @@ interval_sim 100  # simulation timestep in milliseconds
 # configure the GUI window
 window
 (
-  size [ 681 742 ] # in pixels
-  scale 72.091   # pixels per meter
-  center [ 0.183  -0.143 ]
+  size [ 681 370 ] # in pixels
+  scale 40.693   # pixels per meter
+  center [ -1.224  -0.143 ]
   rotate [ 0.000  0.000 ]
 
   show_data 1              # 1=on 0=off
@@ -35,7 +35,7 @@ pioneer2dx
 pioneer2dx
 (
   color "blue"
-  pose [ -1.460 -2.860 0.000 0.000 ]
+  pose [ -1.440 -2.860 0.000 0.000 ]
   fancysick(pose [ 0.250 0.000 -0.200 0.000 ])
 )
 

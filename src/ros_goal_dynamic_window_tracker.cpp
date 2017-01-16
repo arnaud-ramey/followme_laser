@@ -173,6 +173,9 @@ public:
     GoalDynamicWindowTracker::unset_goal();
     geometry_msgs::Twist twist;
     _vel_pub.publish(twist);
+    // clear path message
+    _path_msg.poses.clear();
+    _traj_pub.publish(_path_msg);
   }
 
   tf::TransformListener _tf_listener;

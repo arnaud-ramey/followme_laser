@@ -11,6 +11,8 @@
 
 #define RAD2DEG     57.2957795130823208768  //!< to convert radians to degrees
 #define DEG2RAD     0.01745329251994329577  //!< to convert degrees to radians
+#define DEBUG_PRINT(...)   {}
+//#define DEBUG_PRINT(...)   printf(__VA_ARGS__)
 
 /*!
  \param A
@@ -21,7 +23,7 @@
     min distance otherwise
 */
 template<class _Pt2>
-inline double vectors_dist(const _Pt2 & pt,
+inline double pt2vector_dist(const _Pt2 & pt,
                            const std::vector<_Pt2> & vec) {
   double min_dist_sq = 1E10;
   unsigned int npts = vec.size();
@@ -70,8 +72,6 @@ inline double vectors_dist_thres(const std::vector<_Pt2> & A,
 struct SpeedOrder {
   double v, w;
   SpeedOrder() : v(0), w(0) {}
-  SpeedOrder(const double & lin, const double & ang)
-    : v(lin), w(ang) {}
 }; // end SpeedOrder
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -118,9 +118,12 @@ public:
   //////////////////////////////////////////////////////////////////////////////
 
   inline void set_limit_speeds(double min_v, double max_v, double max_w) {
-    _min_v = min_v;
-    _max_v = max_v;
-    _max_w = max_w;
+    _min_v = fabs(min_v);
+    _max_v = fabs(max_v);
+    _max_w = fabs(max_w);
+    _dv = (_max_v - _min_v) / SPEED_STEPS;
+    _dw = 2 * _max_w / SPEED_STEPS;
+    precompute_trajectories();
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -153,22 +156,16 @@ public:
 
   //////////////////////////////////////////////////////////////////////////////
 
-  inline std::vector<Pt2> get_best_trajectory() {
-    vision_utils::make_trajectory(// get_best_element().element.v,
-                                  _curr_order.v,
-                                  // get_best_element().element.w,
-                                  _curr_order.w,
-                                  _traj_buffer,
-                                  _time_pred, _time_step,
-                                  0, 0, 0);
-    //start_pos.x, start_pos.y, start_yaw);
-    return _traj_buffer;
+  inline const std::vector<Pt2> & get_best_trajectory() {
+    return _trajs[_best_traj_idx];
   }
 
   //////////////////////////////////////////////////////////////////////////////
 
   virtual bool recompute_speeds(double & best_speed_lin,
                                 double & best_speed_ang) {
+    DEBUG_PRINT("recompute_speeds()\n");
+    Action prev_action = _current_action;
     _current_action = ACTION_KEEP_SAME_SPEED;
     if (!_goal_set) {
       _current_action = ACTION_STOP;
@@ -177,41 +174,42 @@ public:
     // recompute speeds if the last ones are too old
     if (_current_action == ACTION_KEEP_SAME_SPEED
         && _last_speed_age.getTimeSeconds() > _speed_recomputation_timeout) {
-      printf("speed_timeout\n");
+      DEBUG_PRINT("speed_timeout\n");
       _current_action = ACTION_RECOMPUTE_SPEED;
 
     }
     // check if there will be a collision soon with the elected speeds
     if (_current_action == ACTION_KEEP_SAME_SPEED &&
-        trajectory_grade(_curr_order.v, _curr_order.w, _costmap_cell_centers) == false) {
-      printf("coming_collision !\n");
+        trajectory_grade(get_best_trajectory(), _costmap_cell_centers) == false) {
+      DEBUG_PRINT("coming_collision !\n");
       _current_action = ACTION_RECOMPUTE_SPEED;
     } // end
 
     // determine if we have reached the goal - 2D distance
-    float curr_goal_distance = vision_utils::distance_points_squared
+    float curr_goal_distance = vision_utils::distance_points
         (_current_robot_pose.position, _goal);
 
     // stop going forward if we are too close
     float goal_angle = atan2(_goal.y, _goal.x); // in the range [-pi, pi]
-    if (_current_action == ACTION_KEEP_SAME_SPEED &&
-        curr_goal_distance < _min_goal_distance) {
+    if ((_current_action == ACTION_KEEP_SAME_SPEED
+         || _current_action == ACTION_RECOMPUTE_SPEED)
+         && curr_goal_distance < _min_goal_distance) {
       // not centered to goal => rotate on place
       if (fabs(goal_angle) > _max_goal_angle) {
-        printf("Close enough from goal (dist:%g < min_goal_distance:%g) "
-               "but need to rotate: fabs(goal_angle:%g) > max_goal_angle:%g\n",
-               curr_goal_distance, _min_goal_distance,
-               fabs(goal_angle), _max_goal_angle);
+        DEBUG_PRINT("Close enough from goal (dist:%g < min_goal_distance:%g) "
+                    "but need to rotate: fabs(goal_angle:%g) > max_goal_angle:%g\n",
+                    curr_goal_distance, _min_goal_distance,
+                    fabs(goal_angle), _max_goal_angle);
         _current_action = ACTION_ROTATE_ON_PLACE;
       } // end if (fabs(goal_angle) > _max_goal_angle)
       else { // centered to goal => stop
-        printf("Close enough from goal (dist:%g < min_goal_distance:%g), "
-               " angle=%g rad so no need to rotate...\n",
-               curr_goal_distance, _min_goal_distance, goal_angle);
+        DEBUG_PRINT("Close enough from goal (dist:%g < min_goal_distance:%g), "
+                    " angle=%g rad so no need to rotate...\n",
+                    curr_goal_distance, _min_goal_distance, goal_angle);
         _current_action = ACTION_STOP;
-        if (!_was_stopped){
-          printf("Goal reached (dist:%g < min_goal_distance:%g) ! Stopping.\n",
-                 curr_goal_distance, _min_goal_distance);
+        if (prev_action != ACTION_STOP){
+          DEBUG_PRINT("Goal reached (dist:%g < min_goal_distance:%g) ! Stopping.\n",
+                      curr_goal_distance, _min_goal_distance);
         } // end if (!was_stopped)
       } // end if centered
     } // end if (curr_goal_distance < _min_goal_distance)
@@ -220,29 +218,31 @@ public:
      * apply actions
      */
     if (_current_action == ACTION_KEEP_SAME_SPEED) {
-      best_speed_lin = _curr_order.v;
-      best_speed_ang = _curr_order.w;
-      return true; // nothing to do
+      best_speed_lin = _best_order.v;
+      best_speed_ang = _best_order.w;
+      // _best_traj_idx does not to be recomputed
     }
 
     else if (_current_action == ACTION_STOP) {
       stop_robot();
-      return true; // OK
     } // end ACTION_STOP
 
     else if (_current_action == ACTION_ROTATE_ON_PLACE) {
       // angle
       // (+) <--- 0 --> (-)
-      double min_rotate_on_place_speed = 0;
+      double min_rotate_on_place_speed = .1 * _max_w;
       double max_rotate_on_place_speed = _max_w;
-      double rotation_speed = min_rotate_on_place_speed +
-          (max_rotate_on_place_speed - min_rotate_on_place_speed)
-          / 2;
-          //* fabs(goal_angle) / M_PI; // this ratio is in [-1, 1]
+      double angle_diff = fabs(goal_angle) - _max_goal_angle; // between 0 and n
+      double rotation_speed = vision_utils::clamp(angle_diff * .5,
+                                                  min_rotate_on_place_speed,
+                                                  max_rotate_on_place_speed); // get there in 5 sec
+      //* fabs(goal_angle) / M_PI; // this ratio is in [-1, 1]
+      _best_order.v = 0;
       if (goal_angle < 0)
-        set_speed(SpeedOrder(0, -rotation_speed));
+        _best_order.w = -rotation_speed;
       else
-        set_speed(SpeedOrder(0, +rotation_speed));
+        _best_order.w = +rotation_speed;
+      _best_traj_idx = speeds2idx(_best_order.v, _best_order.w);
     } // end ACTION_ROTATE_ON_PLACE
 
     else if (_current_action == ACTION_RECOMPUTE_SPEED) {
@@ -250,87 +250,90 @@ public:
       _last_speed_age.reset();
 
       // need a combination of linear and angular speed
-      double best_grade = best_grade_in_range(_min_v, _max_v, _max_w);
-      if (best_grade < 0) // extreme case -> go backward
-        best_grade = best_grade_in_range(-(_min_v+_max_v)*.5, -_min_v, _max_w);
+      double best_grade = best_grade_in_range();
       new_speeds_found = (best_grade > 0);
 
       if (!new_speeds_found) {
-        printf("The robot is stuck! Stopping motion and exiting.\n");
-        stop_robot();
-        return false; // error
+        printf("The robot is stuck! Lost for lost, going backwards.\n");
+        _best_order.v = -(.9 * _min_v + .1 * _max_v);
+        _best_order.w = 0;
+        _best_traj_idx = speeds2idx(_best_order.v, _best_order.w);
       } // end not new_speeds_found
 
-      printf("Found a suitable couple of speeds in %g ms:"
+      printf("goal:%g m, %g rad, found a suitable couple of speeds in %g ms:"
              "_v:%g, _w:%g\n",
+             curr_goal_distance, goal_angle,
              _last_speed_age.getTimeMilliseconds(),
-             _curr_order.v,
-             _curr_order.w);
+             _best_order.v, _best_order.w);
     } // end ACTION_RECOMPUTE_SPEED
 
     // publish the computed speed
-    printf("DynamicWindow: Publishing _v:%g, _w:%g\n",
-           _curr_order.v, _curr_order.w);
-    best_speed_lin = _curr_order.v;
-    best_speed_ang = _curr_order.w;
+    DEBUG_PRINT("DynamicWindow: Publishing _v:%g, _w:%g\n", _best_order.v, _best_order.w);
+    best_speed_lin = _best_order.v;
+    best_speed_ang = _best_order.w;
     return true;  // error
   } // end recompute_speeds()
 
 protected:
 
-
-  ////////////////////////////////////////////////////////////////////////////////
-
-  inline void set_speed(const SpeedOrder & new_speed) {
-    printf("set_speed(lin:%g, ang:%g)\n",
-           new_speed.v, new_speed.w);
-    _was_stopped = (new_speed.v == 0) && (new_speed.w == 0);
-    _curr_order = new_speed;
+  inline int speeds2idx(const double & speed_lin, const double & speed_ang) {
+    int wi = vision_utils::clamp<int>(1. * (speed_ang + _max_w) / _dw, 0, SPEED_STEPS-1);
+    int vi = vision_utils::clamp<int>(1. * (speed_lin - _min_v) / _dv, 0, SPEED_STEPS-1);
+    return wi + vi * SPEED_STEPS;
   }
 
   //////////////////////////////////////////////////////////////////////////////
 
   //! stop the robot
   inline void stop_robot() {
-    set_speed(SpeedOrder());
+    _best_order.v = _best_order.w = 0;
+    _best_traj_idx = speeds2idx(0, 0);
   }
 
   ////////////////////////////////////////////////////////////////////////////////
 
   //! return < 0 if the trajectory will collide with the laser in the time TIME_PRED,
   //! distance to closest obstacle otherwise + bonus for speed
-  double trajectory_grade(const double & v, const double & w,
-                          const std::vector<Pt2> & laser_xy) {
-    // determine the coming trajectory
-    vision_utils::make_trajectory(v, w, _traj_buffer, _time_pred, _time_step, 0, 0, 0);
+  inline double trajectory_grade(const std::vector<Pt2> & traj,
+                                 const std::vector<Pt2> & laser_xy) {
     // find if there might be a collision
-    double obs_dist = vectors_dist_thres(_traj_buffer, laser_xy,
+    double obs_dist = vectors_dist_thres(traj, laser_xy,
                                          _laser_thickness);
     if (obs_dist < 0)
       return -1;
     // return inv of dist to goal - the higher the better
-//    double grade = 1 / vision_utils::distance_points
-//        (_traj_buffer.back(), _goal);
-//    grade -= 1 / obs_dist;
-//    return grade;
-    return 1. / (vectors_dist(_goal, _traj_buffer) + obs_dist / 5);
+    return 1. / (pt2vector_dist(_goal, traj) + obs_dist / 3);
   }
 
   //////////////////////////////////////////////////////////////////////////////
 
-  inline double best_grade_in_range(double min_v, double max_v, double max_w) {
-    printf("best_grade_in_range(v:%g --> %g, w:%g --> %g)\n",
-           min_v, max_v, -max_w, max_w);
-    double best_grade = -1, dv = (max_v - min_v) / SPEED_STEPS, dw = 2 * max_w / SPEED_STEPS;
-    for (double v = min_v; v <= max_v; v += dv) {
-      for (double w = -max_w; w <= max_w; w += dw) {
-        double currr_grade = trajectory_grade(v, w, _costmap_cell_centers);
+  inline void precompute_trajectories() {
+    _trajs.clear();
+    _trajs.reserve(SPEED_STEPS*SPEED_STEPS);
+    for (double v = _min_v; v <= _max_v; v += _dv) {
+      for (double w = -_max_w; w <= _max_w; w += _dw) {
+        std::vector<Pt2> traj;
+        vision_utils::make_trajectory(v, w, traj, _time_pred, _time_step, 0, 0, 0);
+        _trajs.push_back(traj);
+      } // end loop w
+    } // end loop v
+  }
+
+  inline double best_grade_in_range() {
+    DEBUG_PRINT("best_grade_in_range(v:%g --> %g, w:%g --> %g)\n",
+                _min_v, _max_v, -_max_w, _max_w);
+    double best_grade = -1;
+    unsigned int traj_idx = 0;
+    for (double v = _min_v; v <= _max_v; v += _dv) {
+      for (double w = -_max_w; w <= _max_w; w += _dw) {
+        double currr_grade = trajectory_grade(_trajs[traj_idx++], _costmap_cell_centers);
         if (currr_grade < 0)
           continue;
         if (currr_grade < best_grade)
           continue;
-        _curr_order.v = v;
-        _curr_order.w = w;
+        _best_order.v = v;
+        _best_order.w = w;
+        _best_traj_idx = traj_idx;
         best_grade = currr_grade;
       } // end loop w
     } // end loop v
@@ -340,14 +343,15 @@ protected:
   //////////////////////////////////////////////////////////////////////////////
   //////////////////////////////////////////////////////////////////////////////
 
-  std::vector<Pt2> _traj_buffer;
+  std::vector< std::vector<Pt2> > _trajs;
 
   // control
   Action _current_action;
   //! timer since last computed speed
   vision_utils::Timer _last_speed_age;
   //! the current velocities, m/s or rad/s
-  SpeedOrder _curr_order;
+  int _best_traj_idx;
+  SpeedOrder _best_order;
   bool _was_stopped;
 
   // obstacles
@@ -357,7 +361,7 @@ protected:
 
   // robot parameters
   Pose2 _current_robot_pose;
-  double _min_v, _max_v, _max_w;
+  double _min_v, _max_v, _max_w, _dv, _dw;
   Pt2 _goal;
   bool _goal_set;
 
@@ -369,7 +373,7 @@ protected:
   double _time_step;
 
   // GoalDynamicWindowTracker params
-  static const unsigned int MAX_TRIES = 1E6, SPEED_STEPS = 50;
+  static const unsigned int SPEED_STEPS = 40;
 }; // end class GoalDynamicWindowTracker
 
 #endif // _GoalDynamicWindowTracker_H_

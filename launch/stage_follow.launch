@@ -36,12 +36,13 @@
 <!-- configure followme_laser -->
 <remap from="/scan" to="/robot_0/base_scan"/>
 <remap from="/cmd_vel" to="/robot_0/cmd_vel"/>
-<param name="ros_laser_blob_tracker/object_max_distance_btwn_points" value=".15"/>
-<param name="ros_goal_dynamic_window_tracker/robot_radius" value=".3"/>
+<param name="ros_laser_blob_tracker/object_max_distance_btwn_points" value=".1"/>
 <param name="ros_goal_dynamic_window_tracker/max_goal_angle" value=".1"/>
-<param name="ros_goal_dynamic_window_tracker/min_goal_distance" value=".3"/>
-<param name="ros_goal_dynamic_window_tracker/min_vel_lin" value="0"/>
 <param name="ros_goal_dynamic_window_tracker/max_vel_lin" value="2"/>
+<param name="ros_goal_dynamic_window_tracker/min_goal_distance" value=".6"/> <!-- must be greater than robot_radius -->
+<param name="ros_goal_dynamic_window_tracker/min_vel_lin" value="0"/>
+<param name="ros_goal_dynamic_window_tracker/robot_radius" value=".3"/>
+<param name="ros_goal_dynamic_window_tracker/speed_recomputation_timeout" value=".5"/>
 
 <!-- launch followme_laser -->
 <include file="$(find followme_laser)/launch/follow_simple.launch">
