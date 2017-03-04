@@ -11,8 +11,8 @@
 
 #define RAD2DEG     57.2957795130823208768  //!< to convert radians to degrees
 #define DEG2RAD     0.01745329251994329577  //!< to convert degrees to radians
-#define DEBUG_PRINT(...)   {}
-//#define DEBUG_PRINT(...)   printf(__VA_ARGS__)
+//#define DEBUG_PRINT(...)   {}
+#define DEBUG_PRINT(...)   printf(__VA_ARGS__)
 
 /*!
  \param A
@@ -50,6 +50,8 @@ template<class _Pt2>
 inline double vectors_dist_thres(const std::vector<_Pt2> & A,
                                  const std::vector<_Pt2> & B,
                                  const double dist_thres) {
+  if (A.empty() || B.empty())
+    return 0;
   double dist_thres_sq = dist_thres * dist_thres, min_dist_sq = 1E10;
   unsigned int nA = A.size(), nB = B.size();
   for (unsigned int A_idx = 0; A_idx < nA; ++A_idx) {
@@ -130,10 +132,12 @@ public:
 
   inline void set_simulation_parameters(const double time_pred = 5,
                                         const double time_step = .2,
-                                        double speed_recomputation_timeout = 1) {
+                                        double speed_recomputation_timeout = 1,
+                                        double goal_timeout = 1) {
     _time_pred = time_pred;
     _time_step = time_step;
     _speed_recomputation_timeout = speed_recomputation_timeout;
+    _goal_timeout = goal_timeout;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -148,6 +152,7 @@ public:
   inline void set_goal(Pt2 goal) {
     _goal = goal;
     _goal_set = true;
+    _last_goal_age.reset();
   }
   virtual void unset_goal() {
     _goal_set = false;
@@ -164,7 +169,8 @@ public:
 
   virtual bool recompute_speeds(double & best_speed_lin,
                                 double & best_speed_ang) {
-    DEBUG_PRINT("recompute_speeds()\n");
+    DEBUG_PRINT("recompute_speeds(%li cells)\n",
+                _costmap_cell_centers.size());
     Action prev_action = _current_action;
     _current_action = ACTION_KEEP_SAME_SPEED;
     if (!_goal_set) {
@@ -173,15 +179,21 @@ public:
 
     // recompute speeds if the last ones are too old
     if (_current_action == ACTION_KEEP_SAME_SPEED
-        && _last_speed_age.getTimeSeconds() > _speed_recomputation_timeout) {
-      DEBUG_PRINT("speed_timeout\n");
-      _current_action = ACTION_RECOMPUTE_SPEED;
+        && _last_goal_age.getTimeSeconds() > _goal_timeout) {
+      DEBUG_PRINT("goal timeout\n");
+      _current_action = ACTION_STOP;
+    }
 
+    // recompute speeds if the last ones are too old
+    if (_current_action == ACTION_KEEP_SAME_SPEED
+        && _last_speed_age.getTimeSeconds() > _speed_recomputation_timeout) {
+      DEBUG_PRINT("speed timeout\n");
+      _current_action = ACTION_RECOMPUTE_SPEED;
     }
     // check if there will be a collision soon with the elected speeds
     if (_current_action == ACTION_KEEP_SAME_SPEED &&
         trajectory_grade(get_best_trajectory(), _costmap_cell_centers) == false) {
-      DEBUG_PRINT("coming_collision !\n");
+      DEBUG_PRINT("coming_collision with current speeds!\n");
       _current_action = ACTION_RECOMPUTE_SPEED;
     } // end
 
@@ -348,7 +360,7 @@ protected:
   // control
   Action _current_action;
   //! timer since last computed speed
-  vision_utils::Timer _last_speed_age;
+  vision_utils::Timer _last_speed_age, _last_goal_age;
   //! the current velocities, m/s or rad/s
   int _best_traj_idx;
   SpeedOrder _best_order;
@@ -366,7 +378,7 @@ protected:
   bool _goal_set;
 
   // simul parameters
-  double _speed_recomputation_timeout;
+  double _speed_recomputation_timeout, _goal_timeout;
   //! the forecast time in seconds
   double _time_pred;
   //! the time step simulation

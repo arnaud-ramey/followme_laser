@@ -106,6 +106,7 @@ public:
     _nh_private.param("min_vel_lin", min_vel_lin, .1);
     _nh_private.param("speed_recomputation_timeout",
                       _speed_recomputation_timeout, _speed_recomputation_timeout);
+    _nh_private.param("goal_timeout", _goal_timeout, _goal_timeout);
     _nh_private.param("time_pred", _time_pred, _time_pred);
     _nh_private.param("time_step", _time_step, _time_step);
     _nh_private.param("robot_radius", _robot_radius, .5);
