@@ -13,6 +13,7 @@
   <depend>sensor_msgs</depend>
   <depend>tf</depend>
   <depend>visualization_msgs</depend>
+  <depend>vision_utils</depend>
   <export>
     <cpp cflags="-I${prefix} -I${prefix}/build"
          lflags="-lim -L${prefix}/lib -Wl,-rpath,${prefix}/lib" />

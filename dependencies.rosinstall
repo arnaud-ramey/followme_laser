@@ -1,0 +1,3 @@
+- git:
+    local-name: vision_utils
+    uri: https://github.com/UC3MSocialRobots/vision_utils.git

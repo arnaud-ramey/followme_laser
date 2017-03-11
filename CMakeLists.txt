@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(followme_laser)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra") # add extra warnings
 ### 3 - Find other CMake/Catkin packages needed for build
-find_package(catkin REQUIRED COMPONENTS  geometry_msgs  roscpp  sensor_msgs  tf  visualization_msgs)
+find_package(catkin REQUIRED COMPONENTS  geometry_msgs  roscpp  sensor_msgs  tf  visualization_msgs  vision_utils)
 ### 4 - Message/Service/Action Generators (add_message_files(), add_service_files(), add_action_files())
 add_message_files(
   FILES
@@ -21,11 +21,6 @@ catkin_package(
   CATKIN_DEPENDS roscpp  geometry_msgs  roscpp  sensor_msgs  tf  visualization_msgs
 )
 ### 7 - Libraries/Executables to build (add_library()/add_executable()/target_link_libraries())
-# get vision_utils includes from SVN
-execute_process( # https://cmake.org/cmake/help/v3.0/command/execute_process.html
-  COMMAND bash svn_vision_utils.bash
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
 include_directories( include ${catkin_INCLUDE_DIRS})
 add_executable(ros_laser_blob_tracker.exe
                src/ros_laser_blob_tracker.cpp
