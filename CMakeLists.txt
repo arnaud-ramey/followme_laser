@@ -41,7 +41,9 @@ add_dependencies     (ros_goal_dynamic_window_tracker.exe
 )
 
 ### 8 - Tests to build (catkin_add_gtest())
-# Nothing in this package
+catkin_add_gtest     (gtest_goal_dynamic_window_tracker  test/gtest_goal_dynamic_window_tracker.cpp)
+TARGET_LINK_LIBRARIES(gtest_goal_dynamic_window_tracker  ${catkin_LIBRARIES})
+
 ### 9 - Install rules (install())
 install(DIRECTORY include/${PROJECT_NAME}/
    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}

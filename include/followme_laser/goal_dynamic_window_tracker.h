@@ -98,7 +98,7 @@ public:
   //////////////////////////////////////////////////////////////////////////////
 
   GoalDynamicWindowTracker() {
-    _current_action = ACTION_RECOMPUTE_SPEED;
+    _current_action = ACTION_RECOMPUTE_SPEED; // force recompute at next step
     _was_stopped = true;
     _min_v = _max_v = _max_w = -1;
     // default  params
@@ -153,6 +153,7 @@ public:
     _goal = goal;
     _goal_set = true;
     _last_goal_age.reset();
+    _current_action = ACTION_RECOMPUTE_SPEED; // force recompute at next step
   }
   virtual void unset_goal() {
     _goal_set = false;
@@ -167,57 +168,53 @@ public:
 
   //////////////////////////////////////////////////////////////////////////////
 
-  virtual bool recompute_speeds(double & best_speed_lin,
-                                double & best_speed_ang) {
-    DEBUG_PRINT("recompute_speeds(%li cells)\n",
+  //! get the current action
+  inline Action get_current_action() const { return _current_action; }
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  virtual bool recompute_speeds_if_needed(double & best_speed_lin,
+                                          double & best_speed_ang) {
+    DEBUG_PRINT("recompute_speeds_if_needed(%li cells)\n",
                 _costmap_cell_centers.size());
     Action prev_action = _current_action;
-    _current_action = ACTION_KEEP_SAME_SPEED;
+    // determine if we have reached the goal - 2D distance
+    float curr_goal_distance = vision_utils::distance_points
+        (_current_robot_pose.position, _goal);
+    // stop going forward if we are too close
+    float curr_goal_angle = atan2(_goal.y, _goal.x); // in the range [-pi, pi]
+
     if (!_goal_set) {
       _current_action = ACTION_STOP;
     }
-
     // recompute speeds if the last ones are too old
-    if (_current_action == ACTION_KEEP_SAME_SPEED
-        && _last_goal_age.getTimeSeconds() > _goal_timeout) {
+    else if (_last_goal_age.getTimeSeconds() > _goal_timeout) {
       DEBUG_PRINT("goal timeout\n");
       _current_action = ACTION_STOP;
     }
-
     // recompute speeds if the last ones are too old
-    if (_current_action == ACTION_KEEP_SAME_SPEED
-        && _last_speed_age.getTimeSeconds() > _speed_recomputation_timeout) {
+    else if (_last_speed_age.getTimeSeconds() > _speed_recomputation_timeout) {
       DEBUG_PRINT("speed timeout\n");
       _current_action = ACTION_RECOMPUTE_SPEED;
     }
     // check if there will be a collision soon with the elected speeds
-    if (_current_action == ACTION_KEEP_SAME_SPEED &&
-        trajectory_grade(get_best_trajectory(), _costmap_cell_centers) == false) {
+    else if (trajectory_grade(get_best_trajectory(), _costmap_cell_centers) < 0) {
       DEBUG_PRINT("coming_collision with current speeds!\n");
       _current_action = ACTION_RECOMPUTE_SPEED;
-    } // end
-
-    // determine if we have reached the goal - 2D distance
-    float curr_goal_distance = vision_utils::distance_points
-        (_current_robot_pose.position, _goal);
-
-    // stop going forward if we are too close
-    float goal_angle = atan2(_goal.y, _goal.x); // in the range [-pi, pi]
-    if ((_current_action == ACTION_KEEP_SAME_SPEED
-         || _current_action == ACTION_RECOMPUTE_SPEED)
-         && curr_goal_distance < _min_goal_distance) {
+    }
+    else if (curr_goal_distance < _min_goal_distance) {
       // not centered to goal => rotate on place
-      if (fabs(goal_angle) > _max_goal_angle) {
+      if (fabs(curr_goal_angle) > _max_goal_angle) {
         DEBUG_PRINT("Close enough from goal (dist:%g < min_goal_distance:%g) "
                     "but need to rotate: fabs(goal_angle:%g) > max_goal_angle:%g\n",
                     curr_goal_distance, _min_goal_distance,
-                    fabs(goal_angle), _max_goal_angle);
+                    fabs(curr_goal_angle), _max_goal_angle);
         _current_action = ACTION_ROTATE_ON_PLACE;
       } // end if (fabs(goal_angle) > _max_goal_angle)
       else { // centered to goal => stop
         DEBUG_PRINT("Close enough from goal (dist:%g < min_goal_distance:%g), "
                     " angle=%g rad so no need to rotate...\n",
-                    curr_goal_distance, _min_goal_distance, goal_angle);
+                    curr_goal_distance, _min_goal_distance, curr_goal_angle);
         _current_action = ACTION_STOP;
         if (prev_action != ACTION_STOP){
           DEBUG_PRINT("Goal reached (dist:%g < min_goal_distance:%g) ! Stopping.\n",
@@ -225,14 +222,15 @@ public:
         } // end if (!was_stopped)
       } // end if centered
     } // end if (curr_goal_distance < _min_goal_distance)
+    else {
+      _current_action = ACTION_KEEP_SAME_SPEED; // nothing to do
+    }
 
     /*
      * apply actions
      */
     if (_current_action == ACTION_KEEP_SAME_SPEED) {
-      best_speed_lin = _best_order.v;
-      best_speed_ang = _best_order.w;
-      // _best_traj_idx does not to be recomputed
+      // nothing to do
     }
 
     else if (_current_action == ACTION_STOP) {
@@ -244,13 +242,13 @@ public:
       // (+) <--- 0 --> (-)
       double min_rotate_on_place_speed = .1 * _max_w;
       double max_rotate_on_place_speed = _max_w;
-      double angle_diff = fabs(goal_angle) - _max_goal_angle; // between 0 and n
+      double angle_diff = fabs(curr_goal_angle) - _max_goal_angle; // between 0 and n
       double rotation_speed = vision_utils::clamp(angle_diff * .5,
                                                   min_rotate_on_place_speed,
                                                   max_rotate_on_place_speed); // get there in 5 sec
       //* fabs(goal_angle) / M_PI; // this ratio is in [-1, 1]
       _best_order.v = 0;
-      if (goal_angle < 0)
+      if (curr_goal_angle < 0)
         _best_order.w = -rotation_speed;
       else
         _best_order.w = +rotation_speed;
@@ -274,7 +272,7 @@ public:
 
       printf("goal:%g m, %g rad, found a suitable couple of speeds in %g ms:"
              "_v:%g, _w:%g\n",
-             curr_goal_distance, goal_angle,
+             curr_goal_distance, curr_goal_angle,
              _last_speed_age.getTimeMilliseconds(),
              _best_order.v, _best_order.w);
     } // end ACTION_RECOMPUTE_SPEED
@@ -283,7 +281,7 @@ public:
     DEBUG_PRINT("DynamicWindow: Publishing _v:%g, _w:%g\n", _best_order.v, _best_order.w);
     best_speed_lin = _best_order.v;
     best_speed_ang = _best_order.w;
-    return true;  // error
+    return true;  // success
   } // end recompute_speeds()
 
 protected:
