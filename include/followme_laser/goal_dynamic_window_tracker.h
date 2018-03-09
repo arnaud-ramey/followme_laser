@@ -113,6 +113,7 @@ public:
 
   inline void set_costmap(const std::vector<Pt2> & costmap_cell_centers,
                           const double min_obstacle_distance) {
+    DEBUG_PRINT("set_costmap(%li cells)\n", costmap_cell_centers.size());
     _costmap_cell_centers = costmap_cell_centers;
     _laser_thickness = vision_utils::clamp(fabs(min_obstacle_distance), .01, 10.);
   }
@@ -123,8 +124,8 @@ public:
     _min_v = fabs(min_v);
     _max_v = fabs(max_v);
     _max_w = fabs(max_w);
-    _dv = (_max_v - _min_v) / SPEED_STEPS;
-    _dw = 2 * _max_w / SPEED_STEPS;
+    _dv = (_max_v - _min_v) / (SPEED_STEPS-1);
+    _dw = 2 * _max_w / (SPEED_STEPS-1);
     precompute_trajectories();
   }
 
@@ -150,6 +151,7 @@ public:
   //////////////////////////////////////////////////////////////////////////////
 
   inline void set_goal(Pt2 goal) {
+    DEBUG_PRINT("set_goal(%g, %g)\n", goal.x, goal.y);
     _goal = goal;
     _goal_set = true;
     _last_goal_age.reset();
@@ -162,9 +164,27 @@ public:
 
   //////////////////////////////////////////////////////////////////////////////
 
-  inline const std::vector<Pt2> & get_best_trajectory() {
+  inline double get_min_v() const { return _min_v; }
+  inline double get_max_v() const { return _max_v; }
+  inline double get_max_w() const { return _max_w; }
+  inline double get_dv() const { return _dv; }
+  inline double get_dw() const { return _dw; }
+  inline double get_time_pred() const { return _time_pred; }
+  inline double get_time_step() const { return _time_step; }
+  inline double get_speed_recomputation_timeout() const { return _speed_recomputation_timeout; }
+  inline double get_goal_timeout() const { return _goal_timeout; }
+  inline double get_min_goal_distance() const { return _min_goal_distance; }
+  inline double get_max_goal_angle() const { return _max_goal_angle; }
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  inline const std::vector<Pt2> & get_best_trajectory() const {
     return _trajs[_best_traj_idx];
   }
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  inline const SpeedOrder & get_best_order() const { return _best_order; }
 
   //////////////////////////////////////////////////////////////////////////////
 
@@ -175,8 +195,8 @@ public:
 
   virtual bool recompute_speeds_if_needed(double & best_speed_lin,
                                           double & best_speed_ang) {
-    DEBUG_PRINT("recompute_speeds_if_needed(%li cells)\n",
-                _costmap_cell_centers.size());
+    DEBUG_PRINT("recompute_speeds_if_needed(action at start:%i, %li cells)\n",
+                _current_action, _costmap_cell_centers.size());
     Action prev_action = _current_action;
     // determine if we have reached the goal - 2D distance
     float curr_goal_distance = vision_utils::distance_points
@@ -195,11 +215,6 @@ public:
     // recompute speeds if the last ones are too old
     else if (_last_speed_age.getTimeSeconds() > _speed_recomputation_timeout) {
       DEBUG_PRINT("speed timeout\n");
-      _current_action = ACTION_RECOMPUTE_SPEED;
-    }
-    // check if there will be a collision soon with the elected speeds
-    else if (trajectory_grade(get_best_trajectory(), _costmap_cell_centers) < 0) {
-      DEBUG_PRINT("coming_collision with current speeds!\n");
       _current_action = ACTION_RECOMPUTE_SPEED;
     }
     else if (curr_goal_distance < _min_goal_distance) {
@@ -222,9 +237,20 @@ public:
         } // end if (!was_stopped)
       } // end if centered
     } // end if (curr_goal_distance < _min_goal_distance)
+    // recompute speeds if it was asked
+    else if (_current_action == ACTION_RECOMPUTE_SPEED) {
+      // nothing to do
+    }
+    // check if there will be a collision soon with the elected speeds
+    else if (trajectory_grade(get_best_trajectory(), _costmap_cell_centers) < 0) {
+      DEBUG_PRINT("coming_collision with current speeds!\n");
+      _current_action = ACTION_RECOMPUTE_SPEED;
+    }
     else {
       _current_action = ACTION_KEEP_SAME_SPEED; // nothing to do
     }
+    DEBUG_PRINT("current: goal_distance:%g, goal_angle:%g, action:%i\n",
+                curr_goal_distance, curr_goal_angle, _current_action);
 
     /*
      * apply actions
@@ -275,6 +301,7 @@ public:
              curr_goal_distance, curr_goal_angle,
              _last_speed_age.getTimeMilliseconds(),
              _best_order.v, _best_order.w);
+      _current_action = ACTION_KEEP_SAME_SPEED; // no need to recompute next time
     } // end ACTION_RECOMPUTE_SPEED
 
     // publish the computed speed
@@ -312,12 +339,17 @@ protected:
     if (obs_dist < 0)
       return -1;
     // return inv of dist to goal - the higher the better
-    return 1. / (pt2vector_dist(_goal, traj) + obs_dist / 3);
+    return //1. / (pt2vector_dist(_goal, traj) + obs_dist / 3);
+        //1. / pt2vector_dist(_goal, traj);
+        1. / vision_utils::distance_points_squared(_goal, traj.back());
   }
 
   //////////////////////////////////////////////////////////////////////////////
 
   inline void precompute_trajectories() {
+    DEBUG_PRINT("precompute_trajectories(v=(%g,%g,%g), w=(%g,%g,%g)\n",
+                _min_v, _max_v, _dv, -_max_w, _max_w, _dw);
+    _best_traj_idx = 0;
     _trajs.clear();
     _trajs.reserve(SPEED_STEPS*SPEED_STEPS);
     for (double v = _min_v; v <= _max_v; v += _dv) {
@@ -330,8 +362,8 @@ protected:
   }
 
   inline double best_grade_in_range() {
-    DEBUG_PRINT("best_grade_in_range(v:%g --> %g, w:%g --> %g)\n",
-                _min_v, _max_v, -_max_w, _max_w);
+    DEBUG_PRINT("best_grade_in_range(v:%g --> %g (step:%g), w:%g --> %g (step:%g))\n",
+                _min_v, _max_v, _dv, -_max_w, _max_w, _dw);
     double best_grade = -1;
     unsigned int traj_idx = 0;
     for (double v = _min_v; v <= _max_v; v += _dv) {
@@ -341,6 +373,7 @@ protected:
           continue;
         if (currr_grade < best_grade)
           continue;
+        //DEBUG_PRINT("v=%g, w=%g: best grade:%g\n", v, w, currr_grade);
         _best_order.v = v;
         _best_order.w = w;
         _best_traj_idx = traj_idx;
@@ -379,11 +412,11 @@ protected:
   double _speed_recomputation_timeout, _goal_timeout;
   //! the forecast time in seconds
   double _time_pred;
-  //! the time step simulation
+  //! the time step simulation in seconds
   double _time_step;
 
   // GoalDynamicWindowTracker params
-  static const unsigned int SPEED_STEPS = 40;
+  static const unsigned int SPEED_STEPS = 41; // 40 + 1
 }; // end class GoalDynamicWindowTracker
 
 #endif // _GoalDynamicWindowTracker_H_

@@ -10,7 +10,7 @@
 
 <!-- move a bit the robot to follow, otherwise it blinks in Stage (bug?) -->
 <node pkg="rostopic" type="rostopic" name="cmdvel"
-      output="screen" args="pub  -1  /robot_1/cmd_vel  geometry_msgs/Twist '{linear: {x: 0.1}, angular: {z: 0}}'" />
+      output="screen" args="pub  -l  /robot_2/cmd_vel  geometry_msgs/Twist '{linear: {x: 1}, angular: {z: 0}}'" />
 <!-- configure Stage TF -->
 <node pkg="tf" type="static_transform_publisher" name="robot0toworld" output="screen"
       args="0 0 0  0 0 0  /odom /robot_0/odom 100" />

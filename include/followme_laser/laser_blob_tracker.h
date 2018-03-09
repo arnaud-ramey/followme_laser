@@ -95,6 +95,13 @@ public:
     return "";
   } // end get_current_status_as_string()
 
+  //////////////////////////////////////////////////////////////////////////////
+
+  inline bool is_tracking() const {
+    return _current_status == TrackingStatus::TARGET_TRACKING_OK
+        || _current_status == TrackingStatus::TARGET_TRACKING_LOST;
+  } // end get_current_status_as_string()
+
 protected:
 
   //////////////////////////////////////////////////////////////////////////////

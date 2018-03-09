@@ -69,7 +69,7 @@ public:
     set_costmap(_scan2vec_src_frame, _robot_radius);
     geometry_msgs::Twist twist;
     if (!recompute_speeds_if_needed(twist.linear.x, twist.angular.z)) {
-      printf("recompute_speeds() failed!\n");
+      printf("recompute_speeds_if_needed() failed!\n");
       unset_goal();
     }
     else {

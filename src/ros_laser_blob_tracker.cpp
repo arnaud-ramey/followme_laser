@@ -98,6 +98,8 @@ public:
     nh_private.param("object_max_distance_btwn_points", object_max_distance_btwn_points, .2);
     nh_private.param("object_max_searching_radius", object_max_searching_radius, .35);
     nh_private.param("object_timeout", object_timeout, 2.);
+    nh_private.param("button_start", _button_start, -1);
+    nh_private.param("button_stop", _button_stop, -1);
     nh_private.param("distance_to_object", distance_to_object, .05);
     set_object_max_radius(object_max_radius);
     set_object_max_distance_btwn_points(object_max_distance_btwn_points);
@@ -135,6 +137,7 @@ public:
   //////////////////////////////////////////////////////////////////////////////
 
   virtual inline void start_tracking_closest_object() {
+    ROS_INFO("start_tracking_closest_object()");
     stop_tracking_object();
     LaserBlobTracker<Pt2>::start_tracking_closest_object();
   }
@@ -142,6 +145,7 @@ public:
   //////////////////////////////////////////////////////////////////////////////
 
   virtual inline void stop_tracking_object() {
+    ROS_INFO("stop_tracking_object()");
     LaserBlobTracker<Pt2>::stop_tracking_object();
     // publish an empty pose to clean the pose in rviz
     geometry_msgs::PoseStamped msg;
@@ -306,22 +310,11 @@ protected:
 
   void joy_cb(const sensor_msgs::Joy::ConstPtr& joy) {
     // ROS_INFO("joy_cb()");
-
-    /* A super nice drawing for the code of the buttons on the
-       Logitech RumblePad 2:
-       ---------------
-      |  [6]     [7]  |
-      |  [4]     [5]  |
-       ---------------
-      |   |      (3)  |
-      |  -+-   (0) (2)|
-      |   |      (1)  |
-      / /-----------\ \
-     / /             \ \
-      */
-    if (joy->buttons[4] || joy->buttons[6])
+    if (_button_stop >= 0 && _button_stop < (int) joy->buttons.size()
+        && joy->buttons[_button_stop])
       stop_tracking_object();
-    else if (joy->buttons[5] || joy->buttons[7])
+    else if (_button_start >= 0 && _button_start < (int) joy->buttons.size()
+             && joy->buttons[_button_start] && !is_tracking())
       start_tracking_closest_object();
   } // end joy_cb();
 
@@ -331,6 +324,7 @@ protected:
   tf::TransformListener _tf_listener;
   ros::Subscriber _joy_sub, _tracking_seed_sub, _laser_sub;
   std::string _dst_frame;
+  int _button_start, _button_stop;
   SimplePose2D _robot_pose;
   std::vector<Pt2> _pts_src_frame, _pts_dst_frame;
   sensor_msgs::PointCloud _closest_cloud, _tracked_cloud;
